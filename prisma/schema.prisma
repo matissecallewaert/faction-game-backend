@@ -12,30 +12,66 @@ datasource db {
 }
 
 model Game {
-  id            String @default(cuid())
+  id            String    @default(cuid())
   name          String
   height        Int
   width         Int
   tiles         Tile[]
+  factions      Faction[]
   amountOfMoves Int
 
   @@id([name, id])
 }
 
 model Tile {
-  id           Int          @id @default(autoincrement())
+  id           Int
   gameId       String
   gameName     String
   game         Game         @relation(fields: [gameName, gameId], references: [name, id])
   resourceType RESOURCETYPE
-  faction      Int
+  factionId    Int
   unit         String?
   bombed       Boolean      @default(false)
   fortified    Boolean      @default(false)
+
+  @@id([id, gameId])
+}
+
+model Unit {
+  id        String   @id @default(cuid())
+  type      UNITTYPE
+  health    Int
+  index     Int
+  factionId Int
+  gameId    String
+  faction   Faction  @relation(fields: [factionId, gameId], references: [id, gameId])
+}
+
+model Faction {
+  id        Int
+  gameId    String
+  gameName  String
+  game      Game    @relation(fields: [gameName, gameId], references: [name, id])
+  gold      Int
+  baseIndex Int
+  score     Int
+  land      Int
+  destroyed Boolean @default(false)
+  units     Unit[]
+
+  @@id([id, gameId])
 }
 
 enum RESOURCETYPE {
   BASE
   RESOURCE
   EMPTY
+}
+
+enum UNITTYPE {
+  WORKER
+  UNIT
+  WARRIOR
+  HEALER
+  MINER
 }
