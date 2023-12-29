@@ -2,6 +2,7 @@ import fastify, { FastifyServerOptions } from "fastify";
 import prismaPlugin from "./plugins/prisma";
 import fastifyCors from "@fastify/cors";
 import fastifyAxios from "@guilhermegimenez/fastifyaxios";
+import { factionRoutes } from "./routes/faction/factionRoutes";
 
 export async function buildFastifyServer(opts: FastifyServerOptions = {}) {
   const server = fastify(opts);
@@ -19,6 +20,8 @@ export async function buildFastifyServer(opts: FastifyServerOptions = {}) {
     }
     done();
   });
+
+  server.register(factionRoutes, { prefix: "/api/faction" });
 
   return server;
 }
