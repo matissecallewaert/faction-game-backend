@@ -1,0 +1,41 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Game {
+  id            String @default(cuid())
+  name          String
+  height        Int
+  width         Int
+  tiles         Tile[]
+  amountOfMoves Int
+
+  @@id([name, id])
+}
+
+model Tile {
+  id           Int          @id @default(autoincrement())
+  gameId       String
+  gameName     String
+  game         Game         @relation(fields: [gameName, gameId], references: [name, id])
+  resourceType RESOURCETYPE
+  faction      Int
+  unit         String?
+  bombed       Boolean      @default(false)
+  fortified    Boolean      @default(false)
+}
+
+enum RESOURCETYPE {
+  BASE
+  RESOURCE
+  EMPTY
+}
