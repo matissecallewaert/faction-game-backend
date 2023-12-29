@@ -12,13 +12,14 @@ datasource db {
 }
 
 model Game {
-  id            String    @default(cuid())
+  id            String        @unique @default(cuid())
   name          String
   height        Int
   width         Int
   tiles         Tile[]
   factions      Faction[]
   amountOfMoves Int
+  currentGame   currentGame[]
 
   @@id([name, id])
 }
@@ -60,6 +61,13 @@ model Faction {
   units     Unit[]
 
   @@id([id, gameId])
+}
+
+model currentGame {
+  id       Int    @id @default(1)
+  gameId   String
+  gameName String
+  game     Game   @relation(fields: [gameName, gameId], references: [name, id])
 }
 
 enum RESOURCETYPE {
