@@ -1,0 +1,49 @@
+{
+  "name": "faction-game-backend",
+  "version": "1.0.0",
+  "description": "The backend for the faction game created by Matisse Callewaert",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node src/index.js",
+    "start-dev": "tsc-watch --onSuccess 'node src/index.js'",
+    "lint": "eslint . --ext .ts",
+    "prettier": "prettier --config .prettierrc 'src/**/*.ts' --write",
+    "migrate": "npx prisma migrate dev --name init",
+    "seed": "ts-node src/seed.ts"
+  },
+  "prisma": {
+    "seed": "ts-node src/seed.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/matissecallewaert/faction-game-backend.git"
+  },
+  "author": "Matisse Callewaert",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/matissecallewaert/faction-game-backend/issues"
+  },
+  "homepage": "https://github.com/matissecallewaert/faction-game-backend#readme",
+  "dependencies": {
+    "@fastify/cors": "8.5.0",
+    "@guilhermegimenez/fastifyaxios": "1.0.0",
+    "@prisma/client": "5.7.1",
+    "@typescript-eslint/eslint-plugin": "6.16.0",
+    "@typescript-eslint/parser": "6.16.0",
+    "eslint": "8.56.0",
+    "eslint-plugin-prettier": "5.1.2",
+    "fastify": "4.25.2",
+    "fastify-plugin": "4.5.1",
+    "json-schema-to-ts": "3.0.0",
+    "pino-pretty": "10.3.1",
+    "prettier": "3.1.1",
+    "ts-node": "10.9.2",
+    "tsc-watch": "6.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "20.10.5",
+    "prisma": "5.7.1",
+    "typescript": "5.3.3"
+  }
+}
