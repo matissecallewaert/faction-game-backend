@@ -3,6 +3,10 @@ import prismaPlugin from "./plugins/prisma";
 import fastifyCors from "@fastify/cors";
 import fastifyAxios from "@guilhermegimenez/fastifyaxios";
 import { factionRoutes } from "./routes/faction/factionRoutes";
+import { GameLogic } from "./logic/game/gameLogic";
+import { gameRoutes } from "./routes/game/gameRoutes";
+import { tileRoutes } from "./routes/tile/tileRoutes";
+import { unitRoutes } from "./routes/unit/unitRoutes";
 
 export async function buildFastifyServer(opts: FastifyServerOptions = {}) {
   const server = fastify(opts);
@@ -22,6 +26,9 @@ export async function buildFastifyServer(opts: FastifyServerOptions = {}) {
   });
 
   server.register(factionRoutes, { prefix: "/api/faction" });
+  server.register(gameRoutes, { prefix: "/api/game" });
+  server.register(tileRoutes, { prefix: "/api/tile" });
+  server.register(unitRoutes, { prefix: "/api/unit" });
 
   return server;
 }
@@ -46,4 +53,5 @@ buildFastifyServer({
       }
     }
   );
+  const game = new GameLogic(server.prisma, server.log);
 });

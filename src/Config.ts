@@ -10,4 +10,12 @@ export class Config {
   static getDatabaseUrl(): string {
     return getConfigVar("URL_DATABASE");
   }
+
+  static getWidth(): number {
+    return parseInt(getConfigVar("WIDTH"));
+  }
+
+  static getHeight(): number {
+    return parseInt(getConfigVar("HEIGHT"));
+  }
 }
