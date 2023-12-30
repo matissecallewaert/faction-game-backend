@@ -19,7 +19,7 @@ model Game {
   tiles         Tile[]
   factions      Faction[]
   amountOfMoves Int
-  currentGame   currentGame[]
+  createdAt     DateTime @default(now())
 
   @@id([name, id])
 }
@@ -28,9 +28,9 @@ model Tile {
   id           Int
   gameId       String
   gameName     String
-  game         Game         @relation(fields: [gameName, gameId], references: [name, id])
+  game         Game         @relation(fields: [gameName, gameId], references: [name, id], onDelete: Cascade)
   resourceType RESOURCETYPE
-  factionId    Int
+  factionId    Int          @default(-1)
   unit         String?
   bombed       Boolean      @default(false)
   fortified    Boolean      @default(false)
@@ -45,18 +45,18 @@ model Unit {
   index     Int
   factionId Int
   gameId    String
-  faction   Faction  @relation(fields: [factionId, gameId], references: [id, gameId])
+  faction   Faction  @relation(fields: [factionId, gameId], references: [id, gameId], onDelete: Cascade)
 }
 
 model Faction {
   id        Int
   gameId    String
   gameName  String
-  game      Game    @relation(fields: [gameName, gameId], references: [name, id])
-  gold      Int
+  game      Game    @relation(fields: [gameName, gameId], references: [name, id], onDelete: Cascade)
+  gold      Int     @default(1000)
   baseIndex Int
-  score     Int
-  land      Int
+  score     Int     @default(0)
+  land      Int     @default(3)
   destroyed Boolean @default(false)
   units     Unit[]
 
@@ -67,7 +67,6 @@ model currentGame {
   id       Int    @id @default(1)
   gameId   String
   gameName String
-  game     Game   @relation(fields: [gameName, gameId], references: [name, id])
 }
 
 enum RESOURCETYPE {
