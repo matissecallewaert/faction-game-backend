@@ -26,6 +26,7 @@
   },
   "homepage": "https://github.com/matissecallewaert/faction-game-backend#readme",
   "dependencies": {
+    "@faker-js/faker": "8.3.1",
     "@fastify/cors": "8.5.0",
     "@guilhermegimenez/fastifyaxios": "1.0.0",
     "@prisma/client": "5.7.1",
