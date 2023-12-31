@@ -1,6 +1,6 @@
 import { Config } from "../../Config";
 import { faker } from "@faker-js/faker";
-import { PrismaClient, RESOURCETYPE, UNITTYPE } from "../../prisma";
+import { Faction, PrismaClient, RESOURCETYPE, UNITTYPE, Unit } from "../../prisma";
 import { FastifyBaseLogger } from "fastify";
 
 export class GameLogic {
@@ -62,18 +62,47 @@ export class GameLogic {
           index = baseLocations[factionId] - 1 + Config.getWidth();
 
         units.push(
-          this.prisma.unit.create({
-            data: {
-              gameId: game.id,
+              {gameId: game.id,
               factionId: factionId,
               type: UNITTYPE.UNIT,
               health: 100,
-              index: index,
-            },
-          })
+              index: index,}
         );
 
         if (i % 2 === 1) factionId++;
+      }
+
+      try {
+        await this.prisma.$transaction([...factions]);
+      }catch(e){
+        this.log.error(e);
+
+        await this.prisma.game.delete({
+          where: {
+            id: game.id,
+          },
+        });
+
+        throw new Error("Game could not be initialized...");
+      }
+
+      let resultUnits: Unit[] = [];
+
+      try {
+        await Promise.all(units.map(async unit => {
+          const resUnit = await this.prisma.unit.create({ data: unit });
+          resultUnits.push(resUnit);
+        }));
+      } catch (e) {
+        this.log.error(e);
+
+        await this.prisma.game.delete({
+          where: {
+            id: game.id,
+          },
+        });
+
+        throw new Error("Game could not be initialized...");
       }
 
       const tiles: {
@@ -82,6 +111,7 @@ export class GameLogic {
         gameName: string;
         factionId: number;
         resourceType: RESOURCETYPE;
+        unit?: string;
       }[] = [];
       for (let i = 0; i < Config.getWidth() * Config.getHeight(); i++) {
         tiles.push({
@@ -102,14 +132,16 @@ export class GameLogic {
         tiles[index - 1 + Config.getWidth()].factionId = i;
       });
 
+      resultUnits.forEach((unit) => {
+        tiles[unit.index].unit = unit.id;
+      });
+
       const tilePromises = tiles.map((tile) => {
         return this.prisma.tile.create({ data: tile });
       });
 
       try {
         await this.prisma.$transaction([
-          ...factions,
-          ...units,
           ...tilePromises,
         ]);
       } catch (e) {
