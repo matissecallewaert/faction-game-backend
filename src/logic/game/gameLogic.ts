@@ -1,10 +1,6 @@
 import { Config } from "../../Config";
 import { faker } from "@faker-js/faker";
-import {
-  PrismaClient,
-  RESOURCETYPE,
-  UNITTYPE,
-} from "../../prisma";
+import { PrismaClient, RESOURCETYPE, UNITTYPE } from "../../prisma";
 import { FastifyBaseLogger } from "fastify";
 
 export class GameLogic {
@@ -19,6 +15,8 @@ export class GameLogic {
   }
 
   async startGame() {
+    this.log.info("Initializing game...");
+
     try {
       const game = await this.prisma.game.create({
         data: {
@@ -31,7 +29,7 @@ export class GameLogic {
       if (!game) {
         throw new Error("Game could not be created...");
       }
-  
+
       this.currentGame = game.id;
       const baseLocations = this.shuffleArray(
         this.generateBaseIndices(Config.getWidth(), Config.getHeight(), 8, 10)
@@ -41,7 +39,7 @@ export class GameLogic {
         Config.getHeight(),
         10
       );
-  
+
       const factions = [];
       for (let i = 0; i < 10; i++) {
         factions.push(
@@ -55,13 +53,14 @@ export class GameLogic {
           })
         );
       }
-  
+
       const units = [];
       let factionId = 0;
       for (let i = 0; i < 20; i++) {
         let index = baseLocations[factionId] - 1;
-        if (i % 2 === 1) index = baseLocations[factionId] - 1 + Config.getWidth();
-  
+        if (i % 2 === 1)
+          index = baseLocations[factionId] - 1 + Config.getWidth();
+
         units.push(
           this.prisma.unit.create({
             data: {
@@ -73,10 +72,10 @@ export class GameLogic {
             },
           })
         );
-  
+
         if (i % 2 === 1) factionId++;
       }
-  
+
       const tiles: {
         id: number;
         gameId: string;
@@ -95,31 +94,37 @@ export class GameLogic {
             : RESOURCETYPE.EMPTY,
         });
       }
-  
+
       baseLocations.forEach((index, i) => {
         tiles[index].resourceType = RESOURCETYPE.BASE;
         tiles[index].factionId = i;
         tiles[index - 1].factionId = i;
         tiles[index - 1 + Config.getWidth()].factionId = i;
       });
-  
+
       const tilePromises = tiles.map((tile) => {
         return this.prisma.tile.create({ data: tile });
       });
-  
-      try{
-        await this.prisma.$transaction([...factions, ...units, ...tilePromises]);
-      }catch(e){
+
+      try {
+        await this.prisma.$transaction([
+          ...factions,
+          ...units,
+          ...tilePromises,
+        ]);
+      } catch (e) {
         this.log.error(e);
-  
+
         await this.prisma.game.delete({
           where: {
             id: game.id,
           },
         });
+
+        throw new Error("Game could not be initialized...");
       }
 
-      try{
+      try {
         await this.prisma.currentGame.update({
           where: {
             id: 1,
@@ -129,18 +134,84 @@ export class GameLogic {
             gameName: game.name,
           },
         });
-      }catch(e){
-        this.log.error(`Could not update current game to id: ${game.id} and name: ${game.name}...`);
-      }
 
-    }catch(e){
+        this.log.info("Game initialized!");
+      } catch (e) {
+        this.log.error(
+          `Could not update current game to id: ${game.id} and name: ${game.name}...`
+        );
+        throw new Error("Game could not be initialized...");
+      }
+    } catch (e) {
       this.log.error(e);
+      throw new Error("Game could not be initialized...");
     }
   }
 
-  endGame() {
-    console.log("Game over!");
+  async endGame() {
+    this.log.info("Ending game...");
+
+    await this.deleteGamesAfterLastThree();
     this.startGame();
+  }
+
+  private async deleteGamesAfterLastThree() {
+    const games = await this.prisma.game.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 3,
+    });
+
+    if (games.length < 3) {
+      return;
+    }
+
+    const gamesToDelete = await this.prisma.game.findMany({
+      where: {
+        createdAt: {
+          lt: games[2].createdAt,
+        },
+      },
+      include: {
+        factions: true,
+      },
+    });
+
+    if(gamesToDelete.length === 0) {
+      return;
+    }
+
+    const stats = [];
+    for (const game of gamesToDelete) {
+      const factions = game.factions
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3);
+
+      stats.push(
+        this.prisma.gameStats.create({
+          data: {
+            id: game.id,
+            name: game.name,
+            winner: factions[0].id,
+            second: factions[1].id,
+            third: factions[2].id,
+            winnerScore: factions[0].score,
+            secondScore: factions[1].score,
+            thirdScore: factions[2].score,
+          },
+        })
+      );
+    }
+
+    this.prisma.$transaction([
+      ...stats,
+      ...gamesToDelete.map((game) =>
+        this.prisma.game.delete({
+          where: {
+            id: game.id,
+          },
+        })
+      ),
+    ]);
   }
 
   private generateBaseIndices(
