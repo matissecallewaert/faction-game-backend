@@ -12,14 +12,14 @@ datasource db {
 }
 
 model Game {
-  id            String        @unique @default(cuid())
+  id            String    @unique @default(cuid())
   name          String
   height        Int
   width         Int
   tiles         Tile[]
   factions      Faction[]
   amountOfMoves Int
-  createdAt     DateTime @default(now())
+  createdAt     DateTime  @default(now())
 
   @@id([name, id])
 }
@@ -67,6 +67,17 @@ model currentGame {
   id       Int    @id @default(1)
   gameId   String
   gameName String
+}
+
+model gameStats {
+  id          String @id
+  name        String
+  winner      Int
+  second      Int
+  third       Int
+  winnerScore Int
+  secondScore Int
+  thirdScore  Int
 }
 
 enum RESOURCETYPE {
