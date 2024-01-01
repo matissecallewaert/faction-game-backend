@@ -1,12 +1,18 @@
 import { Config } from "../../Config";
 import { faker } from "@faker-js/faker";
-import { Faction, PrismaClient, RESOURCETYPE, UNITTYPE, Unit } from "../../prisma";
+import { PrismaClient, RESOURCETYPE, UNITTYPE, Unit } from "../../prisma";
 import { FastifyBaseLogger } from "fastify";
+import { UNITMOVETYPE } from "../../constants/UnitMoveType";
+import { GameContext } from "../../objects/GameContext";
+import { unitCost, unitHealth, unitMoveCost } from "../../constants/constants";
+import { BASEMOVETYPE } from "../../constants/BaseMoveType";
+import ApiBaseMove from "../../api/ApiBaseMove";
 
 export class GameLogic {
   private prisma: PrismaClient;
   private log: FastifyBaseLogger;
   private currentGame: string = "";
+  private amountOfMoves: number = 0;
 
   constructor(prisma: PrismaClient, log: FastifyBaseLogger) {
     this.prisma = prisma;
@@ -61,20 +67,20 @@ export class GameLogic {
         if (i % 2 === 1)
           index = baseLocations[factionId] - 1 + Config.getWidth();
 
-        units.push(
-              {gameId: game.id,
-              factionId: factionId,
-              type: UNITTYPE.UNIT,
-              health: 100,
-              index: index,}
-        );
+        units.push({
+          gameId: game.id,
+          factionId: factionId,
+          type: UNITTYPE.PIONEER,
+          health: 100,
+          index: index,
+        });
 
         if (i % 2 === 1) factionId++;
       }
 
       try {
         await this.prisma.$transaction([...factions]);
-      }catch(e){
+      } catch (e) {
         this.log.error(e);
 
         await this.prisma.game.delete({
@@ -89,10 +95,12 @@ export class GameLogic {
       let resultUnits: Unit[] = [];
 
       try {
-        await Promise.all(units.map(async unit => {
-          const resUnit = await this.prisma.unit.create({ data: unit });
-          resultUnits.push(resUnit);
-        }));
+        await Promise.all(
+          units.map(async (unit) => {
+            const resUnit = await this.prisma.unit.create({ data: unit });
+            resultUnits.push(resUnit);
+          })
+        );
       } catch (e) {
         this.log.error(e);
 
@@ -141,9 +149,7 @@ export class GameLogic {
       });
 
       try {
-        await this.prisma.$transaction([
-          ...tilePromises,
-        ]);
+        await this.prisma.$transaction([...tilePromises]);
       } catch (e) {
         this.log.error(e);
 
@@ -180,8 +186,70 @@ export class GameLogic {
     }
   }
 
+  async BaseMoves() {
+    const game = await this.prisma.game.findUnique({
+      where: {
+        id: this.currentGame,
+      },
+      include: {
+        factions: true,
+      },
+    });
+
+    if (!game) {
+      throw new Error("Game not found...");
+    }
+
+    const factions = this.shuffleArray(game.factions);
+
+    const factionContexts = factions.map((faction) => {
+      return {
+        id: faction.id,
+        base_location: {
+          x: faction.baseIndex % Config.getWidth(),
+          y: Math.floor(faction.baseIndex / Config.getWidth()),
+        },
+        gold: faction.gold,
+        land: faction.land,
+        population: faction.population,
+        populationCap: Config.getPopulationCap(),
+        kills: faction.kills,
+        score: faction.score,
+        destroyed: faction.destroyed,
+        currentUpkeep: faction.currentUpkeep,
+      };
+    });
+
+    const gameContext: GameContext = {
+      id: game.id,
+      name: game.name,
+      height: game.height,
+      width: game.width,
+      amountOfMoves: game.amountOfMoves,
+      unitHealth: unitHealth,
+      unitCost: unitCost,
+      unitMoveCost: unitMoveCost,
+    };
+
+    for (const factionContext of factionContexts) {
+      const url = Config.getFactionUrl(factionContext.id);
+
+      try{
+        const baseMove = await ApiBaseMove.PostBaseMove(
+          url,
+          gameContext,
+          factionContext
+        );
+          // update faction accordingly
+      }catch(e){
+        this.log.error(e);
+      }
+    }
+  }
+
   async endGame() {
     this.log.info("Ending game...");
+    this.amountOfMoves = 0;
 
     await this.deleteGamesAfterLastThree();
     this.startGame();
@@ -208,7 +276,7 @@ export class GameLogic {
       },
     });
 
-    if(gamesToDelete.length === 0) {
+    if (gamesToDelete.length === 0) {
       return;
     }
 
