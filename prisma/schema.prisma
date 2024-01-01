@@ -49,16 +49,19 @@ model Unit {
 }
 
 model Faction {
-  id        Int
-  gameId    String
-  gameName  String
-  game      Game    @relation(fields: [gameName, gameId], references: [name, id], onDelete: Cascade)
-  gold      Int     @default(1000)
-  baseIndex Int
-  score     Int     @default(0)
-  land      Int     @default(3)
-  destroyed Boolean @default(false)
-  units     Unit[]
+  id            Int
+  gameId        String
+  gameName      String
+  game          Game    @relation(fields: [gameName, gameId], references: [name, id], onDelete: Cascade)
+  gold          Int     @default(1000)
+  baseIndex     Int
+  score         Int     @default(0)
+  land          Int     @default(3)
+  destroyed     Boolean @default(false)
+  units         Unit[]
+  population    Int     @default(2)
+  kills         Int     @default(0)
+  currentUpkeep Int     @default(0)
 
   @@id([id, gameId])
 }
@@ -88,7 +91,7 @@ enum RESOURCETYPE {
 
 enum UNITTYPE {
   WORKER
-  UNIT
+  PIONEER
   WARRIOR
   HEALER
   MINER
