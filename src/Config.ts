@@ -18,4 +18,12 @@ export class Config {
   static getHeight(): number {
     return parseInt(getConfigVar("HEIGHT"));
   }
+
+  static getPopulationCap(): number {
+    return parseInt(getConfigVar("POPULATION_CAP"));
+  }
+
+  static getFactionUrl(id: number): string {
+    return getConfigVar("URL_FACTION_" + id);
+  }
 }
