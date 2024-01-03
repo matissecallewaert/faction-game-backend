@@ -5,17 +5,20 @@ import { FastifyBaseLogger } from "fastify";
 import { GameContext } from "../../objects/GameContext";
 import { unitCost, unitHealth, unitMoveCost } from "../../constants/constants";
 import ApiBaseMove from "../../api/ApiBaseMove";
+import { FactionLogic } from "../faction/factionLogic";
 
 export class GameLogic {
   private prisma: PrismaClient;
   private log: FastifyBaseLogger;
   private currentGame: string = "";
   private amountOfMoves: number = 0;
+  private factionLogic: FactionLogic;
 
   constructor(prisma: PrismaClient, log: FastifyBaseLogger) {
     this.prisma = prisma;
     this.log = log;
     this.startGame();
+    this.factionLogic = new FactionLogic(prisma, log);
   }
 
   async startGame() {
@@ -138,10 +141,6 @@ export class GameLogic {
         tiles[index - 1 + Config.getWidth()].factionId = i;
       });
 
-      resultUnits.forEach((unit) => {
-        tiles[unit.index].unit = unit.id;
-      });
-
       const tilePromises = tiles.map((tile) => {
         return this.prisma.tile.create({ data: tile });
       });
@@ -229,18 +228,40 @@ export class GameLogic {
       unitMoveCost: unitMoveCost,
     };
 
+    const factionsToUpdate = [];
+    const unitsToCreate = [];
     for (const factionContext of factionContexts) {
       const url = Config.getFactionUrl(factionContext.id);
 
-      try{
+      try {
         const baseMove = await ApiBaseMove.PostBaseMove(
           url,
           gameContext,
           factionContext
         );
-          // update faction accordingly
-      }catch(e){
-        this.log.error(e);
+
+        const result = await this.factionLogic.executeBaseMove(
+          baseMove,
+          game.id,
+          factionContext.id
+        );
+
+        factionsToUpdate.push(this.prisma.faction.update({
+          where: {
+            id_gameId: {
+              id: result.faction.id,
+              gameId: result.faction.gameId,
+            },
+          },
+          data: result.faction 
+        }));
+        if (result.unit) {
+          unitsToCreate.push(this.prisma.unit.create({ data: result.unit }));
+        }
+
+        this.prisma.$transaction([...factionsToUpdate, ...unitsToCreate]);
+      } catch (e) {
+        throw e;
       }
     }
   }
