@@ -2,10 +2,8 @@ import { Config } from "../../Config";
 import { faker } from "@faker-js/faker";
 import { PrismaClient, RESOURCETYPE, UNITTYPE, Unit } from "../../prisma";
 import { FastifyBaseLogger } from "fastify";
-import { UNITMOVETYPE } from "../../constants/UnitMoveType";
 import { GameContext } from "../../objects/GameContext";
 import { unitCost, unitHealth, unitMoveCost } from "../../constants/constants";
-import { BASEMOVETYPE } from "../../constants/BaseMoveType";
 import ApiBaseMove from "../../api/ApiBaseMove";
 
 export class GameLogic {
