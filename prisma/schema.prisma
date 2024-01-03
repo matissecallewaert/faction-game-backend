@@ -31,7 +31,6 @@ model Tile {
   game         Game         @relation(fields: [gameName, gameId], references: [name, id], onDelete: Cascade)
   resourceType RESOURCETYPE
   factionId    Int          @default(-1)
-  unit         String?
   bombed       Boolean      @default(false)
   fortified    Boolean      @default(false)
 
@@ -61,7 +60,7 @@ model Faction {
   units         Unit[]
   population    Int     @default(2)
   kills         Int     @default(0)
-  currentUpkeep Int     @default(0)
+  currentUpkeep Int     @default(50)
 
   @@id([id, gameId])
 }
@@ -93,6 +92,5 @@ enum UNITTYPE {
   WORKER
   PIONEER
   WARRIOR
-  HEALER
   MINER
 }
