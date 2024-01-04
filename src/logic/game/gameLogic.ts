@@ -199,7 +199,7 @@ export class GameLogic {
 
     const factions = this.shuffleArray(game.factions);
 
-    const factionContexts = factions.map((faction) => {
+    const factionContexts = factions.filter(faction => !faction.destroyed).map((faction) => {
       return {
         id: faction.id,
         base_location: {
