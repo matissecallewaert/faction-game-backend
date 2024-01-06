@@ -6,6 +6,10 @@ import { GameContext } from "../../objects/GameContext";
 import { unitCost, unitHealth, unitMoveCost } from "../../constants/constants";
 import ApiBaseMove from "../../api/ApiBaseMove";
 import { FactionLogic } from "../faction/factionLogic";
+import { FactionContext } from "../../objects/FactionContext";
+import { UnitContext } from "../../objects/Unit";
+import ApiUnitMove from "../../api/ApiUnitMove";
+import { UnitLogic } from "../unit/UnitLogic";
 
 export class GameLogic {
   private prisma: PrismaClient;
@@ -13,12 +17,14 @@ export class GameLogic {
   private currentGame: string = "";
   private amountOfMoves: number = 0;
   private factionLogic: FactionLogic;
+  private unitLogic: UnitLogic;
 
   constructor(prisma: PrismaClient, log: FastifyBaseLogger) {
     this.prisma = prisma;
     this.log = log;
+    this.factionLogic = new FactionLogic(log);
+    this.unitLogic = new UnitLogic(log);
     this.startGame();
-    this.factionLogic = new FactionLogic(prisma, log);
   }
 
   async startGame() {
@@ -209,30 +215,34 @@ export class GameLogic {
       },
     });
 
-    const factionContexts = factions.filter(faction => !faction.destroyed).map((faction) => {
-      return {
-        id: faction.id,
-        base_location: {
-          x: faction.baseIndex % Config.getWidth(),
-          y: Math.floor(faction.baseIndex / Config.getWidth()),
-          unit: units.filter((unit) => unit.index === faction.baseIndex).map((unit) => ({
-            type: unit.type,
-            health: unit.health,
-            index: unit.index,
-            factionId: unit.factionId,
-            gameId: unit.gameId,
-          }))[0],
-        },
-        gold: faction.gold,
-        land: faction.land,
-        population: faction.population,
-        populationCap: Config.getPopulationCap(),
-        kills: faction.kills,
-        score: faction.score,
-        destroyed: faction.destroyed,
-        currentUpkeep: faction.currentUpkeep,
-      };
-    });
+    const factionContexts: FactionContext[] = factions
+      .filter((faction) => !faction.destroyed)
+      .map((faction) => {
+        return {
+          id: faction.id,
+          base_location: {
+            x: faction.baseIndex % Config.getWidth(),
+            y: Math.floor(faction.baseIndex / Config.getWidth()),
+            unit: units
+              .filter((unit) => unit.index === faction.baseIndex)
+              .map((unit) => ({
+                type: unit.type,
+                health: unit.health,
+                index: unit.index,
+                factionId: unit.factionId,
+                gameId: unit.gameId,
+              }))[0],
+          },
+          gold: faction.gold,
+          land: faction.land,
+          population: faction.population,
+          populationCap: Config.getPopulationCap(),
+          kills: faction.kills,
+          score: faction.score,
+          destroyed: faction.destroyed,
+          currentUpkeep: faction.currentUpkeep,
+        };
+      });
 
     const gameContext: GameContext = {
       id: game.id,
@@ -260,18 +270,25 @@ export class GameLogic {
         const result = await this.factionLogic.executeBaseMove(
           baseMove,
           game.id,
-          factionContext.id
+          factionContext
         );
 
-        factionsToUpdate.push(this.prisma.faction.update({
-          where: {
-            id_gameId: {
-              id: result.faction.id,
-              gameId: result.faction.gameId,
+        factionsToUpdate.push(
+          this.prisma.faction.update({
+            where: {
+              id_gameId: {
+                id: result.faction.id,
+                gameId: game.id,
+              },
             },
-          },
-          data: result.faction 
-        }));
+            data: {
+              gold: result.faction.gold,
+              population: result.faction.population,
+              score: result.faction.score,
+              currentUpkeep: result.faction.currentUpkeep,
+            },
+          })
+        );
         if (result.unit) {
           unitsToCreate.push(this.prisma.unit.create({ data: result.unit }));
         }
@@ -280,11 +297,202 @@ export class GameLogic {
         throw e;
       }
     }
-    try{
-      await this.prisma.$transaction([...factionsToUpdate, ...unitsToCreate]);
-    }catch(e){
+    try {
+      const createdUnits = await this.prisma.$transaction([
+        ...factionsToUpdate,
+        ...unitsToCreate,
+      ]);
+
+      try {
+        const resultingUnits = createdUnits
+          .filter((unit) => typeof unit.id === "string")
+          .map((unit) => unit as Unit);
+
+        const tilesToUpdate = await this.prisma.tile.findMany({
+          where: {
+            gameId: this.currentGame,
+            id: {
+              in: resultingUnits.map((unit) => unit.index),
+            },
+          },
+        });
+
+        const tilesToUpdatePromises = tilesToUpdate.map((tile) => {
+          return this.prisma.tile.update({
+            where: {
+              id_gameId: {
+                id: tile.id,
+                gameId: tile.gameId,
+              },
+            },
+            data: {
+              unit: resultingUnits.filter((unit) => unit.index === tile.id)[0]
+                .id,
+            },
+          });
+        });
+
+        await this.prisma.$transaction([...tilesToUpdatePromises]);
+      } catch (e) {
+        this.log.error(e);
+        // Add fallback mechanism
+        throw new Error("Could not update tiles...");
+      }
+    } catch (e) {
       this.log.error(e);
       throw new Error("Could not update factions and units...");
+    }
+  }
+
+  async UnitMoves() {
+    const game = await this.prisma.game.findUnique({
+      where: {
+        id: this.currentGame,
+      },
+      include: {
+        factions: true,
+        tiles: {
+          orderBy: {
+            id: "asc",
+          },
+        },
+      },
+    });
+
+    if (!game) {
+      throw new Error("Game not found...");
+    }
+
+    const factions = game.factions;
+    const tiles = game.tiles;
+    const units = await this.prisma.unit.findMany({
+      where: {
+        gameId: this.currentGame,
+      },
+    });
+
+    let factionContexts: FactionContext[] = factions
+      .filter((faction) => !faction.destroyed)
+      .map((faction) => {
+        return {
+          id: faction.id,
+          base_location: {
+            x: faction.baseIndex % Config.getWidth(),
+            y: Math.floor(faction.baseIndex / Config.getWidth()),
+            unit: units
+              .filter((unit) => unit.index === faction.baseIndex)
+              .map((unit) => ({
+                type: unit.type,
+                health: unit.health,
+                index: unit.index,
+                factionId: unit.factionId,
+                gameId: unit.gameId,
+              }))[0],
+          },
+          gold: faction.gold,
+          land: faction.land,
+          population: faction.population,
+          populationCap: Config.getPopulationCap(),
+          kills: faction.kills,
+          score: faction.score,
+          destroyed: faction.destroyed,
+          currentUpkeep: faction.currentUpkeep,
+        };
+      });
+
+    const gameContext: GameContext = {
+      id: game.id,
+      name: game.name,
+      height: game.height,
+      width: game.width,
+      amountOfMoves: game.amountOfMoves,
+      unitHealth: unitHealth,
+      unitCost: unitCost,
+      unitMoveCost: unitMoveCost,
+    };
+
+    let unitContexts: UnitContext[] = this.shuffleArray(
+      units.map((unit) => {
+        const neightbourLocations = tiles
+          .filter((tile) => {
+            return (
+              tile.id === unit.index - 1 ||
+              tile.id === unit.index + 1 ||
+              tile.id === unit.index - Config.getWidth() ||
+              tile.id === unit.index + Config.getWidth() ||
+              tile.id === unit.index - Config.getWidth() - 1 ||
+              tile.id === unit.index - Config.getWidth() + 1 ||
+              tile.id === unit.index + Config.getWidth() - 1 ||
+              tile.id === unit.index + Config.getWidth() + 1
+            );
+          })
+          .map((tile) => {
+            return {
+              x: tile.id % Config.getWidth(),
+              y: Math.floor(tile.id / Config.getWidth()),
+              unit: units
+                .filter((unit) => unit.index === tile.id)
+                .map((unit) => ({
+                  type: unit.type,
+                  health: unit.health,
+                  index: unit.index,
+                  factionId: unit.factionId,
+                  gameId: unit.gameId,
+                }))[0],
+            };
+          });
+
+        return {
+          id: unit.id,
+          type: unit.type,
+          health: unit.health,
+          factionId: unit.factionId,
+          location: {
+            x: unit.index % Config.getWidth(),
+            y: Math.floor(unit.index / Config.getWidth()),
+            unit: {
+              type: unit.type,
+              health: unit.health,
+              factionId: unit.factionId,
+              gameId: unit.gameId,
+            },
+          },
+          neightbourLocations: neightbourLocations,
+        };
+      })
+    );
+
+    const factionsToUpdate = [];
+    const unitsToUpdate = [];
+    const unitsToDelete = [];
+
+    for (let unitContext of unitContexts) {
+      const url = Config.getFactionUrl(unitContext.factionId);
+
+      try {
+        const unitMove = await ApiUnitMove.PostUnitMove(
+          url,
+          gameContext,
+          factionContexts.filter(
+            (faction) => faction.id === unitContext.factionId
+          )[0],
+          unitContext
+        );
+
+        const result = await this.unitLogic.executeUnitMove(
+          unitMove,
+          game.id,
+          factionContexts,
+          unitContexts,
+          unitContext.id
+        );
+
+        unitContexts = result.units;
+        factionContexts = result.factions;
+      } catch (e) {
+        this.log.error(e);
+        throw e;
+      }
     }
   }
 
