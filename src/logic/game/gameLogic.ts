@@ -198,6 +198,16 @@ export class GameLogic {
     }
 
     const factions = this.shuffleArray(game.factions);
+    const indexes = factions.map((faction) => faction.baseIndex);
+
+    const units = await this.prisma.unit.findMany({
+      where: {
+        gameId: this.currentGame,
+        index: {
+          in: indexes,
+        },
+      },
+    });
 
     const factionContexts = factions.filter(faction => !faction.destroyed).map((faction) => {
       return {
@@ -205,6 +215,13 @@ export class GameLogic {
         base_location: {
           x: faction.baseIndex % Config.getWidth(),
           y: Math.floor(faction.baseIndex / Config.getWidth()),
+          unit: units.filter((unit) => unit.index === faction.baseIndex).map((unit) => ({
+            type: unit.type,
+            health: unit.health,
+            index: unit.index,
+            factionId: unit.factionId,
+            gameId: unit.gameId,
+          }))[0],
         },
         gold: faction.gold,
         land: faction.land,
@@ -258,11 +275,16 @@ export class GameLogic {
         if (result.unit) {
           unitsToCreate.push(this.prisma.unit.create({ data: result.unit }));
         }
-
-        this.prisma.$transaction([...factionsToUpdate, ...unitsToCreate]);
       } catch (e) {
+        this.log.error(e);
         throw e;
       }
+    }
+    try{
+      await this.prisma.$transaction([...factionsToUpdate, ...unitsToCreate]);
+    }catch(e){
+      this.log.error(e);
+      throw new Error("Could not update factions and units...");
     }
   }
 
