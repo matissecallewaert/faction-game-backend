@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `Tile` ADD COLUMN `unit` VARCHAR(191) NULL;
