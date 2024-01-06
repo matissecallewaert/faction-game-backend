@@ -1,7 +1,7 @@
-import { UnitWithoutId } from "./Unit";
+import { UnitWithoutIndex } from "./Unit";
 
 export type Location = {
   x: number;
   y: number;
-  unit: UnitWithoutId | null;
+  unit: UnitWithoutIndex | null;
 };

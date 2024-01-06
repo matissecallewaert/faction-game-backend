@@ -9,6 +9,13 @@ export type UnitWithoutId = {
   gameId: string;
 };
 
+export type UnitWithoutIndex = {
+  type: UNITTYPE;
+  health: number;
+  factionId: number;
+  gameId: string;
+};
+
 export type UnitContext = {
   id: string;
   type: UNITTYPE;
