@@ -171,7 +171,7 @@ export class GameLogic {
           id: 1,
         },
       });
-      if(!currentGame) {
+      if (!currentGame) {
         await this.prisma.currentGame.create({
           data: {
             id: 1,
@@ -179,7 +179,7 @@ export class GameLogic {
             gameName: game.name,
           },
         });
-      }else{
+      } else {
         await this.prisma.currentGame.update({
           where: {
             id: 1,
