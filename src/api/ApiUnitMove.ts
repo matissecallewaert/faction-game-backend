@@ -1,6 +1,7 @@
 import { UNITMOVETYPE } from "../constants/UnitMoveType";
 import { FactionContext } from "../objects/FactionContext";
 import { GameContext } from "../objects/GameContext";
+import { Location } from "../objects/Location";
 import { UnitContext } from "../objects/Unit";
 import ApiInstance from "./ApiInstance";
 
