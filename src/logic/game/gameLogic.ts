@@ -69,6 +69,7 @@ export class GameLogic {
 
       const units = [];
       let factionId = 0;
+
       for (let i = 0; i < 20; i++) {
         let index = baseLocations[factionId] - 1;
         if (i % 2 === 1)
@@ -165,7 +166,20 @@ export class GameLogic {
         throw new Error("Game could not be initialized...");
       }
 
-      try {
+      const currentGame = await this.prisma.currentGame.findUnique({
+        where: {
+          id: 1,
+        },
+      });
+      if(!currentGame) {
+        await this.prisma.currentGame.create({
+          data: {
+            id: 1,
+            gameId: game.id,
+            gameName: game.name,
+          },
+        });
+      }else{
         await this.prisma.currentGame.update({
           where: {
             id: 1,
@@ -175,21 +189,16 @@ export class GameLogic {
             gameName: game.name,
           },
         });
-
-        this.log.info("Game initialized!");
-      } catch (e) {
-        this.log.error(
-          `Could not update current game to id: ${game.id} and name: ${game.name}...`
-        );
-        throw new Error("Game could not be initialized...");
       }
+
+      this.log.info("Game initialized!");
     } catch (e) {
       this.log.error(e);
       throw new Error("Game could not be initialized...");
     }
   }
 
-  async BaseMoves() {
+  private async BaseMoves() {
     const game = await this.prisma.game.findUnique({
       where: {
         id: this.currentGame,
@@ -344,7 +353,7 @@ export class GameLogic {
     }
   }
 
-  async UnitMoves() {
+  private async UnitMoves() {
     const game = await this.prisma.game.findUnique({
       where: {
         id: this.currentGame,
@@ -479,16 +488,14 @@ export class GameLogic {
           unitContext
         );
 
-        const result = await this.unitLogic.executeUnitMove(
+        this.unitLogic.executeUnitMove(
           unitMove,
           game.id,
           factionContexts,
           unitContexts,
+          tiles,
           unitContext.id
         );
-
-        unitContexts = result.units;
-        factionContexts = result.factions;
       } catch (e) {
         this.log.error(e);
         throw e;
