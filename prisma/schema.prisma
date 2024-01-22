@@ -29,7 +29,7 @@ model Tile {
   gameId       String
   gameName     String
   game         Game         @relation(fields: [gameName, gameId], references: [name, id], onDelete: Cascade)
-  resourceType RESOURCETYPE
+  resourceType RESOURCETYPE @default(EMPTY)
   unit         String?
   factionId    Int          @default(-1)
   bombed       Boolean      @default(false)
