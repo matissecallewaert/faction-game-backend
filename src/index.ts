@@ -54,4 +54,5 @@ buildFastifyServer({
     }
   );
   const game = new GameLogic(server.prisma, server.log);
+  game.startGame();
 });

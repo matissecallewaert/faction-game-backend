@@ -3,7 +3,12 @@ import { faker } from "@faker-js/faker";
 import { PrismaClient, RESOURCETYPE, UNITTYPE, Unit } from "../../prisma";
 import { FastifyBaseLogger } from "fastify";
 import { GameContext } from "../../objects/GameContext";
-import { unitCost, unitHealth, unitMoveCost } from "../../constants/constants";
+import {
+  unitCost,
+  unitHealth,
+  unitMoveCost,
+  unitUpkeep,
+} from "../../constants/constants";
 import ApiBaseMove from "../../api/ApiBaseMove";
 import { FactionLogic } from "../faction/factionLogic";
 import { FactionContext } from "../../objects/FactionContext";
@@ -18,6 +23,7 @@ export class GameLogic {
   private amountOfMoves: number = 0;
   private factionLogic: FactionLogic;
   private unitLogic: UnitLogic;
+  private interval: NodeJS.Timeout | undefined;
 
   constructor(prisma: PrismaClient, log: FastifyBaseLogger) {
     this.prisma = prisma;
@@ -79,7 +85,7 @@ export class GameLogic {
           gameId: game.id,
           factionId: factionId,
           type: UNITTYPE.PIONEER,
-          health: 100,
+          health: 3,
           index: index,
         });
 
@@ -100,7 +106,7 @@ export class GameLogic {
         throw new Error("Game could not be initialized...");
       }
 
-      let resultUnits: Unit[] = [];
+      const resultUnits: Unit[] = [];
 
       try {
         await Promise.all(
@@ -192,6 +198,10 @@ export class GameLogic {
       }
 
       this.log.info("Game initialized!");
+      this.interval = setInterval(async () => {
+        await this.BaseMoves();
+        await this.UnitMoves();
+      }, 5000);
     } catch (e) {
       this.log.error(e);
       throw new Error("Game could not be initialized...");
@@ -345,11 +355,9 @@ export class GameLogic {
       } catch (e) {
         this.log.error(e);
         // Add fallback mechanism
-        throw new Error("Could not update tiles...");
       }
     } catch (e) {
       this.log.error(e);
-      throw new Error("Could not update factions and units...");
     }
   }
 
@@ -380,7 +388,7 @@ export class GameLogic {
       },
     });
 
-    let factionContexts: FactionContext[] = factions
+    const factionContexts: FactionContext[] = factions
       .filter((faction) => !faction.destroyed)
       .map((faction) => {
         return {
@@ -420,7 +428,7 @@ export class GameLogic {
       unitMoveCost: unitMoveCost,
     };
 
-    let unitContexts: UnitContext[] = this.shuffleArray(
+    const unitContexts: UnitContext[] = this.shuffleArray(
       units.map((unit) => {
         const neightbourLocations = tiles
           .filter((tile) => {
@@ -474,8 +482,9 @@ export class GameLogic {
     const factionsToUpdate = [];
     const unitsToUpdate = [];
     const unitsToDelete = [];
+    const tilesToUpdateIds: number[] = [];
 
-    for (let unitContext of unitContexts) {
+    for (const unitContext of unitContexts) {
       const url = Config.getFactionUrl(unitContext.factionId);
 
       try {
@@ -490,16 +499,110 @@ export class GameLogic {
 
         this.unitLogic.executeUnitMove(
           unitMove,
-          game.id,
           factionContexts,
           unitContexts,
           tiles,
+          tilesToUpdateIds,
           unitContext.id
         );
       } catch (e) {
         this.log.error(e);
-        throw e;
       }
+    }
+
+    for (const unit of unitContexts) {
+      const faction = factionContexts.filter(
+        (faction) => faction.id === unit.factionId
+      )[0];
+      if (unit.health <= 0 || faction.destroyed) {
+        unitsToDelete.push(
+          this.prisma.unit.delete({
+            where: {
+              id: unit.id,
+            },
+          })
+        );
+        continue;
+      }
+
+      unitsToUpdate.push(
+        this.prisma.unit.update({
+          where: {
+            id: unit.id,
+          },
+          data: {
+            health: unit.health,
+            index: unit.location.y * Config.getWidth() + unit.location.x,
+          },
+        })
+      );
+    }
+
+    for (const faction of factionContexts) {
+      if (faction.destroyed) {
+        tiles
+          .filter((tile) => tile.factionId === faction.id)
+          .forEach((tile) => {
+            tile.factionId = -1;
+            tilesToUpdateIds.push(tile.id);
+          });
+      }
+      factionsToUpdate.push(
+        this.prisma.faction.update({
+          where: {
+            id_gameId: {
+              id: faction.id,
+              gameId: game.id,
+            },
+          },
+          data: {
+            gold: faction.gold,
+            land: faction.land,
+            population: faction.population,
+            kills: faction.kills,
+            score: faction.score,
+            destroyed: faction.destroyed,
+            currentUpkeep: units
+              .filter((unit) => unit.factionId === faction.id)
+              .reduce((acc, unit) => acc + (unitUpkeep.get(unit.type) || 0), 0),
+          },
+        })
+      );
+    }
+
+    const updatedTiles = tiles.filter((tile) =>
+      tilesToUpdateIds.includes(tile.id)
+    );
+
+    const tilesToUpdate = updatedTiles.map((tile) => {
+      return this.prisma.tile.update({
+        where: {
+          id_gameId: {
+            id: tile.id,
+            gameId: tile.gameId,
+          },
+        },
+        data: {
+          unit: tile.unit,
+          factionId: tile.factionId,
+        },
+      });
+    });
+
+    try {
+      await this.prisma.$transaction([
+        ...factionsToUpdate,
+        ...unitsToUpdate,
+        ...unitsToDelete,
+        ...tilesToUpdate,
+      ]);
+    } catch (e) {
+      this.log.error(e);
+    }
+    this.amountOfMoves++;
+
+    if (this.amountOfMoves === 500) {
+      this.endGame();
     }
   }
 
