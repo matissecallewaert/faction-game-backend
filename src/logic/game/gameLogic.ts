@@ -1,6 +1,6 @@
 import { Config } from "../../Config";
 import { faker } from "@faker-js/faker";
-import { PrismaClient, RESOURCETYPE, UNITTYPE, Unit } from "../../prisma";
+import { PrismaClient, RESOURCETYPE, Tile, UNITTYPE, Unit } from "../../prisma";
 import { FastifyBaseLogger } from "fastify";
 import { GameContext } from "../../objects/GameContext";
 import {
@@ -15,6 +15,7 @@ import { FactionContext } from "../../objects/FactionContext";
 import { UnitContext } from "../../objects/Unit";
 import ApiUnitMove from "../../api/ApiUnitMove";
 import { UnitLogic } from "../unit/UnitLogic";
+import { PrismaPromise } from "@prisma/client";
 
 export class GameLogic {
   private prisma: PrismaClient;
@@ -24,13 +25,13 @@ export class GameLogic {
   private factionLogic: FactionLogic;
   private unitLogic: UnitLogic;
   private interval: NodeJS.Timeout | undefined;
+  private amountOfFactions: number = 1;
 
   constructor(prisma: PrismaClient, log: FastifyBaseLogger) {
     this.prisma = prisma;
     this.log = log;
     this.factionLogic = new FactionLogic(log);
     this.unitLogic = new UnitLogic(log);
-    this.startGame();
   }
 
   async startGame() {
@@ -51,16 +52,16 @@ export class GameLogic {
 
       this.currentGame = game.id;
       const baseLocations = this.shuffleArray(
-        this.generateBaseIndices(Config.getWidth(), Config.getHeight(), 8, 10)
+        this.generateBaseIndices(Config.getWidth(), Config.getHeight(), 8, this.amountOfFactions)
       );
       const resourceLocations = this.generateResourceIndices(
         Config.getWidth(),
         Config.getHeight(),
-        10
+        100
       );
 
       const factions = [];
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < this.amountOfFactions; i++) {
         factions.push(
           this.prisma.faction.create({
             data: {
@@ -76,7 +77,7 @@ export class GameLogic {
       const units = [];
       let factionId = 0;
 
-      for (let i = 0; i < 20; i++) {
+      for (let i = 0; i < this.amountOfFactions * 2; i++) {
         let index = baseLocations[factionId] - 1;
         if (i % 2 === 1)
           index = baseLocations[factionId] - 1 + Config.getWidth();
@@ -141,6 +142,7 @@ export class GameLogic {
           gameId: game.id,
           gameName: game.name,
           factionId: -1,
+          unit: resultUnits.filter((unit) => unit.index === i)[0]?.id,
           resourceType: resourceLocations.includes(i)
             ? RESOURCETYPE.RESOURCE
             : RESOURCETYPE.EMPTY,
@@ -215,6 +217,7 @@ export class GameLogic {
       },
       include: {
         factions: true,
+        tiles: true,
       },
     });
 
@@ -263,6 +266,8 @@ export class GameLogic {
         };
       });
 
+    const baseTiles = game.tiles.filter(t => t.resourceType === RESOURCETYPE.BASE);
+
     const gameContext: GameContext = {
       id: game.id,
       name: game.name,
@@ -278,18 +283,21 @@ export class GameLogic {
     const unitsToCreate = [];
     for (const factionContext of factionContexts) {
       const url = Config.getFactionUrl(factionContext.id);
+      const baseTile = baseTiles.find(t => t.factionId === factionContext.id);
 
       try {
         const baseMove = await ApiBaseMove.PostBaseMove(
           url,
           gameContext,
-          factionContext
+          factionContext,
+          baseTile
         );
-
+        
         const result = await this.factionLogic.executeBaseMove(
           baseMove,
           game.id,
-          factionContext
+          factionContext,
+          baseTile
         );
 
         factionsToUpdate.push(
@@ -313,7 +321,6 @@ export class GameLogic {
         }
       } catch (e) {
         this.log.error(e);
-        throw e;
       }
     }
     try {
@@ -354,7 +361,9 @@ export class GameLogic {
         await this.prisma.$transaction([...tilesToUpdatePromises]);
       } catch (e) {
         this.log.error(e);
+        this.log.error("Something went wrong while updating everything, we end the game here and start over...");
         // Add fallback mechanism
+        this.endGame();
       }
     } catch (e) {
       this.log.error(e);
@@ -574,7 +583,9 @@ export class GameLogic {
       tilesToUpdateIds.includes(tile.id)
     );
 
-    const tilesToUpdate = updatedTiles.map((tile) => {
+    const tilesToUpdate: PrismaPromise<Tile>[] = [];
+
+    for(let tile of updatedTiles) {
       return this.prisma.tile.update({
         where: {
           id_gameId: {
@@ -587,7 +598,7 @@ export class GameLogic {
           factionId: tile.factionId,
         },
       });
-    });
+    };
 
     try {
       await this.prisma.$transaction([

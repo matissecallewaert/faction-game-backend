@@ -34,6 +34,7 @@ export class UnitLogic {
 
     switch (unit?.type) {
       case UNITTYPE.PIONEER:
+        this.log.info("Executing Pioneer move ...");
         executed = this.basicUnitMoves(
           unitMove,
           units,
@@ -57,6 +58,7 @@ export class UnitLogic {
         break;
 
       case UNITTYPE.WORKER:
+        this.log.info("Executing Worker move ...");
         executed = this.basicUnitMoves(
           unitMove,
           units,
@@ -73,6 +75,7 @@ export class UnitLogic {
         break;
 
       case UNITTYPE.WARRIOR:
+        this.log.info("Executing Warrior move ...");
         executed = this.basicUnitMoves(
           unitMove,
           units,
@@ -96,6 +99,7 @@ export class UnitLogic {
         break;
 
       case UNITTYPE.MINER:
+        this.log.info("Executing Miner move ...");
         executed = this.basicUnitMoves(
           unitMove,
           units,
@@ -135,7 +139,6 @@ export class UnitLogic {
 
       case UNITMOVETYPE.NEUTRALIZE_ENEMY_TILE:
         this.conquerEnemyTile(unit, tiles, factions, tilesToUpdateIds);
-
         break;
 
       case UNITMOVETYPE.GENERATE_GOLD:
