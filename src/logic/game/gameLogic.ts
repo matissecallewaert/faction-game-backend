@@ -661,12 +661,12 @@ export class GameLogic {
           data: {
             id: game.id,
             name: game.name,
-            winner: factions[0].id,
-            second: factions[1].id,
-            third: factions[2].id,
-            winnerScore: factions[0].score,
-            secondScore: factions[1].score,
-            thirdScore: factions[2].score,
+            winner: factions[0]?.id || 0,
+            second: factions[1]?.id || 1,
+            third: factions[2]?.id || 2,
+            winnerScore: factions[0]?.score || 0,
+            secondScore: factions[1]?.score || 0,
+            thirdScore: factions[2]?.score || 0,
           },
         })
       );
